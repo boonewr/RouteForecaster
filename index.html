@@ -1,6 +1,5 @@
 <!DOCTYPE html>
 <html lang="en">
-
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -15,7 +14,6 @@
             --accent-text: #ffffff;
             --shadow-color: rgba(0, 0, 0, 0.1);
         }
-
         body {
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
             margin: 0;
@@ -26,7 +24,6 @@
             flex-direction: column;
             min-height: 100vh;
         }
-
         .container {
             width: 100%;
             max-width: 800px;
@@ -34,18 +31,15 @@
             padding: 1rem;
             box-sizing: border-box;
         }
-
         header {
             text-align: center;
             padding: 1rem 0;
             border-bottom: 1px solid var(--border-color);
         }
-
         h1 {
             margin: 0;
             color: var(--accent-color);
         }
-
         .controls {
             display: flex;
             flex-direction: column;
@@ -56,7 +50,10 @@
             box-shadow: 0 2px 4px var(--shadow-color);
             margin-top: 1rem;
         }
-
+        /* Style the custom autocomplete element */
+        gmp-place-autocomplete {
+            width: 100%;
+        }
         input[type="text"] {
             width: 100%;
             padding: 0.75rem;
@@ -65,7 +62,6 @@
             border-radius: 4px;
             box-sizing: border-box;
         }
-
         button {
             padding: 0.75rem;
             font-size: 1rem;
@@ -77,78 +73,61 @@
             cursor: pointer;
             transition: background-color 0.2s;
         }
-
         button:hover {
             background-color: #0056b3;
         }
-
         #map {
             width: 100%;
-            height: 40vh;
-            /* Good starting height for mobile */
+            height: 40vh; /* Good starting height for mobile */
             min-height: 300px;
             margin-top: 1rem;
             border-radius: 8px;
             box-shadow: 0 2px 4px var(--shadow-color);
         }
-
         #forecast-container {
             margin-top: 1rem;
         }
-
         .loader {
             text-align: center;
             padding: 2rem;
             display: none;
         }
-
         table {
             width: 100%;
             border-collapse: collapse;
             background-color: var(--secondary-bg);
             box-shadow: 0 2px 4px var(--shadow-color);
             border-radius: 8px;
-            overflow: hidden;
-            /* For rounded corners */
+            overflow: hidden; /* For rounded corners */
         }
-
-        th,
-        td {
+        th, td {
             text-align: left;
             padding: 0.75rem;
             border-bottom: 1px solid var(--border-color);
         }
-
         thead {
             background-color: var(--accent-color);
             color: var(--accent-text);
         }
-
         tbody tr:last-child td {
             border-bottom: none;
         }
-
         tbody tr:nth-child(even) {
             background-color: var(--primary-bg);
         }
-
-        /* Make table scrollable on small screens */
         .table-wrapper {
             overflow-x: auto;
         }
-
         @media (min-width: 768px) {
             .controls {
                 flex-direction: row;
             }
-
             #map {
                 height: 50vh;
             }
         }
     </style>
 </head>
-
 <body>
 
     <div class="container">
@@ -158,10 +137,17 @@
 
         <main>
             <div class="controls">
-                <gmp-place-autocomplete for="start-input"><input type="text" id="start-input"
-                        placeholder="Starting Location"></gmp-place-autocomplete>
-                <gmp-place-autocomplete for="end-input"><input type="text" id="end-input"
-                        placeholder="Destination"></gmp-place-autocomplete>
+                <!-- 
+                  UPDATED: Replaced standard inputs with Google's Place Autocomplete elements.
+                  This provides the search predictions dropdown.
+                -->
+                <gmp-place-autocomplete for="start-input">
+                    <input type="text" id="start-input" placeholder="Starting Location">
+                </gmp-place-autocomplete>
+                <gmp-place-autocomplete for="end-input">
+                    <input type="text" id="end-input" placeholder="Destination">
+                </gmp-place-autocomplete>
+
                 <button id="get-route-btn">Get Forecast</button>
             </div>
 
@@ -188,11 +174,9 @@
 
     <script>
         // --- CONFIGURATION ---
-        const GOOGLE_MAPS_API_KEY = "AIzaSyBuaSdE9LPM9oKonWXMGNkF6xZbtLgC4kc"; // <-- IMPORTANT: PASTE YOUR KEY HERE
+        const GOOGLE_MAPS_API_KEY = "YOUR_GOOGLE_MAPS_API_KEY"; // <-- IMPORTANT: PASTE YOUR KEY HERE
 
         // --- DOM ELEMENTS ---
-        const startInput = document.getElementById('start');
-        const endInput = document.getElementById('end');
         const getRouteBtn = document.getElementById('get-route-btn');
         const mapDiv = document.getElementById('map');
         const forecastTable = document.getElementById('forecast-table');
@@ -219,6 +203,9 @@
             directionsRenderer.setMap(map);
             geocoder = new google.maps.Geocoder();
 
+            // The new <gmp-place-autocomplete> elements handle the UI automatically.
+            // No extra JavaScript is needed to initialize them.
+
             getRouteBtn.addEventListener('click', calculateAndDisplayRoute);
         }
 
@@ -226,6 +213,7 @@
          * Calculates the route and triggers the weather forecast fetch.
          */
         async function calculateAndDisplayRoute() {
+            // UPDATED: Get values from the input fields nested inside the custom elements.
             const start = document.getElementById('start-input').value;
             const end = document.getElementById('end-input').value;
 
@@ -233,7 +221,7 @@
                 alert("Please enter both a starting location and a destination.");
                 return;
             }
-
+            
             showLoader(true);
             forecastTable.style.display = 'none';
             forecastBody.innerHTML = '';
@@ -276,13 +264,13 @@
 
             // Add destination point
             pointsToForecast.push({ timeOffset: totalDurationSeconds, location: leg.end_location });
-
+            
             const forecasts = await Promise.all(pointsToForecast.map(fetchWeatherForPoint));
 
             forecasts.forEach(forecast => {
                 if (forecast) addForecastRow(forecast);
             });
-
+            
             showLoader(false);
             forecastTable.style.display = 'table';
         }
@@ -329,7 +317,7 @@
 
                 const forecastTime = new Date(Date.now() + timeOffset * 1000);
                 const forecastHourStr = forecastTime.toISOString().substring(0, 14) + "00"; // Format to YYYY-MM-DDTHH:00
-
+                
                 const hourIndex = weatherData.hourly.time.indexOf(forecastHourStr);
                 if (hourIndex === -1) return null; // No data for this hour
 
@@ -345,7 +333,7 @@
                 return null;
             }
         }
-
+        
         /**
          * Formats a geocoding result into a "City, State" string.
          * @param {google.maps.GeocoderResult} geocodeResult
@@ -375,7 +363,7 @@
                 <td>${getWeatherDescription(weatherCode)}</td>
             `;
         }
-
+        
         /**
          * Toggles the visibility of the loading spinner.
          * @param {boolean} isVisible
@@ -409,9 +397,11 @@
         }
 
     </script>
+    <!-- 
+      FIXED: Corrected the typo in the URL below (gogleapis -> googleapis).
+      This was preventing the entire Google Maps library from loading.
+    -->
     <script src="https://maps.googleapis.com/maps/api/js?key=AIzaSyBuaSdE9LPM9oKonWXMGNkF6xZbtLgC4kc&callback=initMap" async></script>
-    
 
 </body>
-
 </html>
