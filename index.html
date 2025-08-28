@@ -1,0 +1,397 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Route Weather Planner</title>
+    <style>
+        :root {
+            --primary-bg: #f8f9fa;
+            --secondary-bg: #ffffff;
+            --text-color: #212529;
+            --border-color: #dee2e6;
+            --accent-color: #007bff;
+            --accent-text: #ffffff;
+            --shadow-color: rgba(0, 0, 0, 0.1);
+        }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 0;
+            padding: 0;
+            background-color: var(--primary-bg);
+            color: var(--text-color);
+            display: flex;
+            flex-direction: column;
+            min-height: 100vh;
+        }
+        .container {
+            width: 100%;
+            max-width: 800px;
+            margin: 0 auto;
+            padding: 1rem;
+            box-sizing: border-box;
+        }
+        header {
+            text-align: center;
+            padding: 1rem 0;
+            border-bottom: 1px solid var(--border-color);
+        }
+        h1 {
+            margin: 0;
+            color: var(--accent-color);
+        }
+        .controls {
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+            padding: 1rem;
+            background-color: var(--secondary-bg);
+            border-radius: 8px;
+            box-shadow: 0 2px 4px var(--shadow-color);
+            margin-top: 1rem;
+        }
+        input[type="text"] {
+            width: 100%;
+            padding: 0.75rem;
+            font-size: 1rem;
+            border: 1px solid var(--border-color);
+            border-radius: 4px;
+            box-sizing: border-box;
+        }
+        button {
+            padding: 0.75rem;
+            font-size: 1rem;
+            font-weight: bold;
+            color: var(--accent-text);
+            background-color: var(--accent-color);
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            transition: background-color 0.2s;
+        }
+        button:hover {
+            background-color: #0056b3;
+        }
+        #map {
+            width: 100%;
+            height: 40vh; /* Good starting height for mobile */
+            min-height: 300px;
+            margin-top: 1rem;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px var(--shadow-color);
+        }
+        #forecast-container {
+            margin-top: 1rem;
+        }
+        .loader {
+            text-align: center;
+            padding: 2rem;
+            display: none;
+        }
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background-color: var(--secondary-bg);
+            box-shadow: 0 2px 4px var(--shadow-color);
+            border-radius: 8px;
+            overflow: hidden; /* For rounded corners */
+        }
+        th, td {
+            text-align: left;
+            padding: 0.75rem;
+            border-bottom: 1px solid var(--border-color);
+        }
+        thead {
+            background-color: var(--accent-color);
+            color: var(--accent-text);
+        }
+        tbody tr:last-child td {
+            border-bottom: none;
+        }
+        tbody tr:nth-child(even) {
+            background-color: var(--primary-bg);
+        }
+        /* Make table scrollable on small screens */
+        .table-wrapper {
+            overflow-x: auto;
+        }
+        @media (min-width: 768px) {
+            .controls {
+                flex-direction: row;
+            }
+            #map {
+                height: 50vh;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <header>
+            <h1>Route Weather Planner 🌦️</h1>
+        </header>
+
+        <main>
+            <div class="controls">
+                <input type="text" id="start" placeholder="Starting Location">
+                <input type="text" id="end" placeholder="Destination">
+                <button id="get-route-btn">Get Forecast</button>
+            </div>
+
+            <div id="map"></div>
+
+            <div id="forecast-container">
+                <div class="loader" id="loader">Loading forecast...</div>
+                <div class="table-wrapper">
+                    <table id="forecast-table" style="display:none;">
+                        <thead>
+                            <tr>
+                                <th>Time</th>
+                                <th>Location</th>
+                                <th>Temp (°F)</th>
+                                <th>Conditions</th>
+                            </tr>
+                        </thead>
+                        <tbody id="forecast-body"></tbody>
+                    </table>
+                </div>
+            </div>
+        </main>
+    </div>
+
+    <script>
+        // --- CONFIGURATION ---
+        const GOOGLE_MAPS_API_KEY = "AIzaSyCzYqKpnzot1r3olhLyaiBH5uvFU0Pjl28"; // <-- IMPORTANT: PASTE YOUR KEY HERE
+
+        // --- DOM ELEMENTS ---
+        const startInput = document.getElementById('start');
+        const endInput = document.getElementById('end');
+        const getRouteBtn = document.getElementById('get-route-btn');
+        const mapDiv = document.getElementById('map');
+        const forecastTable = document.getElementById('forecast-table');
+        const forecastBody = document.getElementById('forecast-body');
+        const loader = document.getElementById('loader');
+
+        // --- GLOBAL VARIABLES ---
+        let map;
+        let directionsService;
+        let directionsRenderer;
+        let geocoder;
+
+        /**
+         * Initializes the Google Map and related services.
+         * This function is the callback for the Google Maps script.
+         */
+        function initMap() {
+            map = new google.maps.Map(mapDiv, {
+                center: { lat: 39.8283, lng: -98.5795 }, // Center of the US
+                zoom: 4,
+            });
+            directionsService = new google.maps.DirectionsService();
+            directionsRenderer = new google.maps.DirectionsRenderer();
+            directionsRenderer.setMap(map);
+            geocoder = new google.maps.Geocoder();
+
+            const autocompleteOptions = {
+                fields: ["address_components", "geometry", "icon", "name"],
+                types: ["geocode"],
+            };
+
+            const startAutocomplete = new google.maps.places.Autocomplete(startInput, autocompleteOptions);
+            const endAutocomplete = new google.maps.places.Autocomplete(endInput, autocompleteOptions);
+
+            getRouteBtn.addEventListener('click', calculateAndDisplayRoute);
+        }
+
+        /**
+         * Calculates the route and triggers the weather forecast fetch.
+         */
+        async function calculateAndDisplayRoute() {
+            const start = startInput.value;
+            const end = endInput.value;
+
+            if (!start || !end) {
+                alert("Please enter both a starting location and a destination.");
+                return;
+            }
+            
+            showLoader(true);
+            forecastTable.style.display = 'none';
+            forecastBody.innerHTML = '';
+
+            const request = {
+                origin: start,
+                destination: end,
+                travelMode: 'DRIVING',
+            };
+
+            try {
+                const response = await directionsService.route(request);
+                directionsRenderer.setDirections(response);
+                await getForecastForRoute(response.routes[0]);
+            } catch (error) {
+                alert("Directions request failed: " + error.message);
+                showLoader(false);
+            }
+        }
+
+        /**
+         * Processes the route to get weather forecasts at intervals.
+         * @param {google.maps.DirectionsRoute} route The route object from the Directions API.
+         */
+        async function getForecastForRoute(route) {
+            const leg = route.legs[0];
+            const totalDurationSeconds = leg.duration.value;
+            const threeHoursInSeconds = 3 * 60 * 60;
+            const intervalSeconds = totalDurationSeconds > threeHoursInSeconds ? 30 * 60 : 15 * 60; // 30 or 15 minutes
+
+            let pointsToForecast = [];
+
+            // Add starting point
+            pointsToForecast.push({ timeOffset: 0, location: leg.start_location });
+
+            // Generate points along the route at specified intervals
+            for (let t = intervalSeconds; t < totalDurationSeconds; t += intervalSeconds) {
+                pointsToForecast.push({ timeOffset: t, location: findPointOnRoute(leg, t) });
+            }
+
+            // Add destination point
+            pointsToForecast.push({ timeOffset: totalDurationSeconds, location: leg.end_location });
+            
+            const forecasts = await Promise.all(pointsToForecast.map(fetchWeatherForPoint));
+
+            forecasts.forEach(forecast => {
+                if (forecast) addForecastRow(forecast);
+            });
+            
+            showLoader(false);
+            forecastTable.style.display = 'table';
+        }
+
+        /**
+         * Finds the geographical coordinate on the route at a specific time offset.
+         * @param {google.maps.DirectionsLeg} leg The route leg.
+         * @param {number} targetTimeSeconds The time in seconds from the start.
+         * @returns {google.maps.LatLng} The coordinate at that time.
+         */
+        function findPointOnRoute(leg, targetTimeSeconds) {
+            let elapsedTime = 0;
+            for (const step of leg.steps) {
+                if (elapsedTime + step.duration.value >= targetTimeSeconds) {
+                    const timeIntoStep = targetTimeSeconds - elapsedTime;
+                    const fraction = timeIntoStep / step.duration.value;
+                    // Interpolate between the start and end of the step's path
+                    return google.maps.geometry.spherical.interpolate(step.start_location, step.end_location, fraction);
+                }
+                elapsedTime += step.duration.value;
+            }
+            return leg.end_location; // Fallback to the end
+        }
+
+        /**
+         * Fetches weather and location name for a single point.
+         * @param {object} point - An object with timeOffset and location (LatLng).
+         * @returns {Promise<object|null>} A promise that resolves with the forecast data.
+         */
+        async function fetchWeatherForPoint(point) {
+            const { timeOffset, location } = point;
+            const lat = location.lat();
+            const lon = location.lng();
+
+            try {
+                // Fetch weather from Open-Meteo API
+                const weatherApiUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=temperature_2m,precipitation_probability,weathercode&temperature_unit=fahrenheit&windspeed_unit=mph&precipitation_unit=inch`;
+                const weatherResponse = await fetch(weatherApiUrl);
+                const weatherData = await weatherResponse.json();
+
+                // Reverse geocode to get city name
+                const geocodeResponse = await geocoder.geocode({ location });
+                const locationName = geocodeResponse.results[0] ? getReadableLocation(geocodeResponse.results[0]) : "On Route";
+
+                const forecastTime = new Date(Date.now() + timeOffset * 1000);
+                const forecastHourStr = forecastTime.toISOString().substring(0, 14) + "00"; // Format to YYYY-MM-DDTHH:00
+                
+                const hourIndex = weatherData.hourly.time.indexOf(forecastHourStr);
+                if (hourIndex === -1) return null; // No data for this hour
+
+                return {
+                    time: forecastTime,
+                    locationName,
+                    temperature: Math.round(weatherData.hourly.temperature_2m[hourIndex]),
+                    weatherCode: weatherData.hourly.weathercode[hourIndex]
+                };
+
+            } catch (error) {
+                console.error("Failed to fetch forecast for a point:", error);
+                return null;
+            }
+        }
+        
+        /**
+         * Formats a geocoding result into a "City, State" string.
+         * @param {google.maps.GeocoderResult} geocodeResult
+         * @returns {string} Readable location name.
+         */
+        function getReadableLocation(geocodeResult) {
+            const locality = geocodeResult.address_components.find(c => c.types.includes("locality"))?.long_name;
+            const adminArea = geocodeResult.address_components.find(c => c.types.includes("administrative_area_level_1"))?.short_name;
+            if (locality && adminArea) return `${locality}, ${adminArea}`;
+            if (locality) return locality;
+            if (adminArea) return adminArea;
+            return geocodeResult.formatted_address.split(',').slice(0, 2).join(',');
+        }
+
+        /**
+         * Adds a row of forecast data to the results table.
+         * @param {object} forecastData - The processed forecast data for one point.
+         */
+        function addForecastRow(forecastData) {
+            const { time, locationName, temperature, weatherCode } = forecastData;
+
+            const row = forecastBody.insertRow();
+            row.innerHTML = `
+                <td>${time.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}</td>
+                <td>${locationName}</td>
+                <td>${temperature}°F</td>
+                <td>${getWeatherDescription(weatherCode)}</td>
+            `;
+        }
+        
+        /**
+         * Toggles the visibility of the loading spinner.
+         * @param {boolean} isVisible
+         */
+        function showLoader(isVisible) {
+            loader.style.display = isVisible ? 'block' : 'none';
+        }
+
+        /**
+         * Converts WMO weather codes from Open-Meteo to a descriptive string with emoji.
+         * @param {number} code The WMO weather code.
+         * @returns {string} A user-friendly description.
+         */
+        function getWeatherDescription(code) {
+            const descriptions = {
+                0: "☀️ Clear sky",
+                1: "🌤️ Mainly clear", 2: "🌥️ Partly cloudy", 3: "☁️ Overcast",
+                45: "🌫️ Fog", 48: "🌫️ Rime fog",
+                51: "💧 Drizzle", 53: "💧 Drizzle", 55: "💧 Drizzle",
+                56: "❄️ Freezing Drizzle", 57: "❄️ Freezing Drizzle",
+                61: "🌧️ Slight rain", 63: "🌧️ Moderate rain", 65: "🌧️ Heavy rain",
+                66: "❄️ Freezing Rain", 67: "❄️ Freezing Rain",
+                71: "🌨️ Slight snow", 73: "🌨️ Moderate snow", 75: "🌨️ Heavy snow",
+                77: "❄️ Snow grains",
+                80: "🌦️ Slight showers", 81: "🌦️ Moderate showers", 82: "⛈️ Violent showers",
+                85: "🌨️ Snow showers", 86: "🌨️ Snow showers",
+                95: "🌩️ Thunderstorm",
+                96: "⛈️ Thunderstorm, hail", 99: "⛈️ Thunderstorm, heavy hail",
+            };
+            return descriptions[code] || "N/A";
+        }
+
+    </script>
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=${GOOGLE_MAPS_API_KEY}&libraries=places,geometry&callback=initMap"></script>
+
+</body>
+</html>
